@@ -98,6 +98,57 @@ php -S localhost:8000
 
 3. Navigate to `http://localhost:8000` in your browser
 
+## 🌐 Deployment
+
+### Automated GitHub Pages Deployment
+
+This repository includes automated deployment to GitHub Pages using GitHub Actions. The deployment happens automatically whenever changes are pushed to the `main` branch.
+
+#### Setup Instructions
+
+1. **Enable GitHub Pages**: 
+   - Go to your repository settings on GitHub
+   - Navigate to "Pages" in the left sidebar
+   - Under "Source", select "GitHub Actions"
+
+2. **Configure Repository Settings**:
+   - Ensure the repository is public (GitHub Pages for private repos requires GitHub Pro)
+   - The deployment workflow is already configured in `.github/workflows/deploy.yml`
+
+3. **Automatic Deployment**:
+   - Push changes to the `main` branch
+   - GitHub Actions will automatically build and deploy to GitHub Pages
+   - Your app will be available at: `https://[username].github.io/[repository-name]`
+
+For this repository, the live demo is available at:
+**https://harjotsingh8.github.io/Driving-assignments/**
+
+#### Manual Deployment
+
+If you prefer to deploy manually or to other hosting platforms:
+
+**Netlify Drop**:
+1. Build the project locally (no build step required - it's static)
+2. Drag and drop the entire folder to [Netlify Drop](https://app.netlify.com/drop)
+
+**Vercel**:
+1. Install Vercel CLI: `npm i -g vercel`
+2. Run `vercel` in the project directory
+3. Follow the prompts
+
+**Traditional Web Hosting**:
+1. Upload all files to your web server
+2. Ensure `index.html` is in the root directory
+3. Configure your server to serve static files
+
+#### Deployment Checklist
+
+- [ ] Repository is public (for free GitHub Pages)
+- [ ] GitHub Pages is enabled in repository settings
+- [ ] Source is set to "GitHub Actions"
+- [ ] Latest changes are pushed to `main` branch
+- [ ] Check GitHub Actions tab for deployment status
+
 ### Usage
 
 #### 1. Setup Phase
