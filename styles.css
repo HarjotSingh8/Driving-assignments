@@ -202,6 +202,46 @@ main {
 }
 
 /* Assignment interface */
+.auto-assign-controls {
+    margin-bottom: 2rem;
+}
+
+.auto-assign-btn {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.auto-assign-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+}
+
+.clear-assign-btn {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.clear-assign-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+}
+
+.manual-assignment {
+    margin-top: 2rem;
+}
+
 .driver-assignment {
     margin-bottom: 2rem;
     padding: 1.5rem;
@@ -210,7 +250,7 @@ main {
     background: white;
 }
 
-.driver-assignment h3 {
+.driver-assignment h3, .driver-assignment h4 {
     margin-bottom: 1rem;
     color: #667eea;
 }
@@ -283,6 +323,33 @@ main {
 #map {
     height: 100%;
     width: 100%;
+}
+
+/* Custom Leaflet marker styles */
+.custom-marker {
+    background: white;
+    border: 2px solid #333;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+
+.destination-marker {
+    border-color: #FF0000;
+    background: #FFE6E6;
+}
+
+.driver-marker {
+    border-color: #0066CC;
+    background: #E6F3FF;
+}
+
+.pickup-marker {
+    border-color: #28a745;
+    background: #E6F7E6;
 }
 
 /* Loading overlay */

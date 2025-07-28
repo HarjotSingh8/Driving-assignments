@@ -57,12 +57,36 @@ export class UIManager {
             return;
         }
         
+        // Add auto-assign controls
+        const autoAssignDiv = document.createElement('div');
+        autoAssignDiv.className = 'auto-assign-controls';
+        autoAssignDiv.innerHTML = `
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                <h3 style="margin-top: 0;">🤖 Automatic Assignment</h3>
+                <p>Let the system automatically assign pickups to drivers to minimize travel distance.</p>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button id="autoAssignGreedy" class="auto-assign-btn">Smart Auto-Assign</button>
+                    <button id="autoAssignCluster" class="auto-assign-btn">Geographic Clustering</button>
+                    <button id="clearAllAssignments" class="clear-assign-btn">Clear All</button>
+                </div>
+                <small style="color: #666; display: block; margin-top: 10px;">
+                    Smart Auto-Assign balances distance and workload. Geographic Clustering assigns based on proximity only.
+                </small>
+            </div>
+        `;
+        container.appendChild(autoAssignDiv);
+        
+        // Add manual assignment interface
+        const manualDiv = document.createElement('div');
+        manualDiv.className = 'manual-assignment';
+        manualDiv.innerHTML = '<h3>📝 Manual Assignment</h3>';
+        
         data.drivers.forEach(driver => {
             const driverDiv = document.createElement('div');
             driverDiv.className = 'driver-assignment';
             
             driverDiv.innerHTML = `
-                <h3>${this.escapeHtml(driver.name)}</h3>
+                <h4>${this.escapeHtml(driver.name)}</h4>
                 <div class="pickup-checkboxes" data-driver-id="${driver.id}">
                     ${data.pickups.map(pickup => `
                         <label class="pickup-checkbox">
@@ -73,8 +97,76 @@ export class UIManager {
                 </div>
             `;
             
-            container.appendChild(driverDiv);
+            manualDiv.appendChild(driverDiv);
         });
+        
+        container.appendChild(manualDiv);
+        
+        // Add event listeners for auto-assign buttons
+        this.setupAutoAssignListeners();
+    }
+    
+    setupAutoAssignListeners() {
+        const greedyBtn = document.getElementById('autoAssignGreedy');
+        const clusterBtn = document.getElementById('autoAssignCluster');
+        const clearBtn = document.getElementById('clearAllAssignments');
+        
+        if (greedyBtn) {
+            greedyBtn.addEventListener('click', () => {
+                this.triggerAutoAssign('greedy');
+            });
+        }
+        
+        if (clusterBtn) {
+            clusterBtn.addEventListener('click', () => {
+                this.triggerAutoAssign('cluster');
+            });
+        }
+        
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                this.clearAllAssignments();
+            });
+        }
+    }
+    
+    triggerAutoAssign(method) {
+        // Dispatch custom event for the app to handle
+        const event = new CustomEvent('autoAssign', { 
+            detail: { method } 
+        });
+        document.dispatchEvent(event);
+    }
+    
+    clearAllAssignments() {
+        // Clear all checkboxes
+        document.querySelectorAll('.pickup-checkboxes input[type="checkbox"]').forEach(checkbox => {
+            checkbox.checked = false;
+        });
+        
+        this.showMessage('All assignments cleared', 'success');
+    }
+    
+    applyAutoAssignment(assignments) {
+        // First clear all existing assignments
+        this.clearAllAssignments();
+        
+        // Apply the new assignments
+        Object.keys(assignments).forEach(driverId => {
+            const pickupIds = assignments[driverId];
+            pickupIds.forEach(pickupId => {
+                const checkbox = document.querySelector(
+                    `input[data-driver-id="${driverId}"][data-pickup-id="${pickupId}"]`
+                );
+                if (checkbox) {
+                    checkbox.checked = true;
+                }
+            });
+        });
+        
+        // Count assignments for feedback
+        const totalAssignments = Object.values(assignments).reduce((sum, pickups) => sum + pickups.length, 0);
+        this.showMessage(`Auto-assigned ${totalAssignments} pickups to drivers`, 'success');
     }
     
     getAssignments() {

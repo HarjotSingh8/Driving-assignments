@@ -39,6 +39,9 @@ class DrivingAssignmentsApp {
         // Assignment page
         document.getElementById('calculateRoutes').addEventListener('click', () => this.handleCalculateRoutes());
         
+        // Auto-assign functionality
+        document.addEventListener('autoAssign', (e) => this.handleAutoAssign(e.detail.method));
+        
         // Handle dynamic event delegation for remove buttons
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('remove-btn')) {
@@ -209,6 +212,49 @@ class DrivingAssignmentsApp {
             this.saveData();
         } catch (error) {
             alert('Failed to calculate routes: ' + error.message);
+        } finally {
+            this.showLoading(false);
+        }
+    }
+    
+    async handleAutoAssign(method) {
+        const data = this.dataManager.getData();
+        
+        if (!data.destination) {
+            alert('Please set a destination first');
+            return;
+        }
+        
+        if (data.drivers.length === 0) {
+            alert('Please add at least one driver');
+            return;
+        }
+        
+        if (data.pickups.length === 0) {
+            alert('Please add at least one pickup location');
+            return;
+        }
+        
+        this.showLoading(true);
+        
+        try {
+            let assignments;
+            
+            if (method === 'greedy') {
+                assignments = await this.routingService.autoAllocatePickups(data);
+            } else if (method === 'cluster') {
+                assignments = await this.routingService.clusterBasedAllocation(
+                    data.drivers, 
+                    data.pickups, 
+                    data.destination
+                );
+            }
+            
+            // Apply the assignments to the UI
+            this.uiManager.applyAutoAssignment(assignments);
+            
+        } catch (error) {
+            alert('Failed to auto-assign pickups: ' + error.message);
         } finally {
             this.showLoading(false);
         }
