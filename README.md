@@ -27,11 +27,14 @@ A comprehensive web application for coordinating driving assignments, pickup loc
 - Flexible assignment allowing any combination
 
 ### ⏰ Route Calculation & Timing
+- **Real routing with live traffic data** using Google Maps Directions API
+- **Automatic fallback system**: Google Maps → OSRM → Mock routing
 - Optimal pickup ordering using nearest neighbor algorithm
-- Accurate duration and distance calculations
+- **Traffic-aware duration calculations** with real-time delay information
 - Pickup time calculation working backwards from arrival time
 - 5-minute buffer automatically applied
 - Display of departure times and individual pickup schedules
+- **Turn-by-turn directions** and detailed route information
 
 ### 🗺️ Route Visualization
 - Detailed route information for each driver
@@ -74,6 +77,7 @@ js/
 ### Prerequisites
 
 - Modern web browser (Chrome, Firefox, Safari, Edge)
+- **Optional**: Google Maps API key for live traffic data ([Setup Guide](GOOGLE_MAPS_SETUP.md))
 - No server setup required - runs entirely client-side
 
 ### Installation
@@ -97,6 +101,19 @@ php -S localhost:8000
 ```
 
 3. Navigate to `http://localhost:8000` in your browser
+
+### 🗺️ Configure Routing (Optional but Recommended)
+
+For the best experience with **real routing and live traffic data**:
+
+1. **Get a Google Maps API key** - Follow our [Setup Guide](GOOGLE_MAPS_SETUP.md)
+2. **Configure the API key** in the app:
+   - Go to the "Setup" tab
+   - Find the "🗺️ Routing Configuration" section  
+   - Enter your API key and click "Save"
+3. **Enjoy real routing** with live traffic data!
+
+**Without API key**: The app automatically falls back to OSRM (real roads, no traffic) or mock routing.
 
 ## 🌐 Deployment
 
@@ -171,25 +188,39 @@ If you prefer to deploy manually or to other hosting platforms:
 
 ## 🔧 API Integration
 
-The application is designed to work with free public APIs:
+The application now supports **real routing with live traffic data** through multiple routing providers:
 
-### Geocoding (Nominatim)
-- **Endpoint**: `https://nominatim.openstreetmap.org/search`
-- **Purpose**: Convert addresses to latitude/longitude coordinates
-- **Rate Limit**: 1 request per second
-- **No API key required**
+### 🚗 Google Maps Directions API (Recommended)
+- **Real road routing** with turn-by-turn directions
+- **Live traffic data** for accurate travel time estimates
+- **Traffic-aware routing** that accounts for current conditions
+- **Multiple routing options** (avoid tolls, highways, etc.)
+- **Setup required**: See [Google Maps API Setup Guide](GOOGLE_MAPS_SETUP.md)
 
-### Routing (OSRM)
-- **Endpoint**: `http://router.project-osrm.org/route/v1/driving/`
-- **Purpose**: Calculate routes and durations between coordinates
-- **No API key required**
+### 🗺️ OSRM (Open Source Routing Machine) 
+- **Free alternative** with real road routing using OpenStreetMap data
+- **No API key required** - works out of the box
+- **Good accuracy** for basic routing needs
+- **No traffic data** - uses static travel time estimates
 
-### Current Implementation
-The current version includes mock services for demonstration purposes. To enable real API calls:
+### 📐 Mock Routing (Fallback)
+- **Always available** - works offline
+- **Straight-line distance** calculations with estimated travel times
+- **Fallback option** when other services are unavailable
 
-1. Update the service URLs in `geocodingService.js` and `routingService.js`
-2. Uncomment the fetch request code
-3. Handle rate limiting and error responses appropriately
+### 🔄 Automatic Fallback System
+The application intelligently selects the best available routing method:
+1. **Google Maps API** (if configured with API key)
+2. **OSRM** (if Google Maps unavailable or not configured)  
+3. **Mock routing** (guaranteed fallback for offline use)
+
+### Current Implementation Features
+- **Real-time traffic integration** when using Google Maps API
+- **Provider badges** showing which routing method is being used
+- **Traffic delay indicators** with color-coded warnings
+- **Detailed turn-by-turn directions** for supported providers
+- **Route optimization** for multiple pickup locations
+- **Caching system** to reduce API calls and improve performance
 
 ## 🎨 Customization
 

@@ -207,6 +207,34 @@ export class UIManager {
         const totalDistance = this.formatDistance(route.totalDistance);
         const totalDuration = this.formatDuration(route.totalDuration);
         
+        // Get routing provider and traffic information
+        const provider = route.route?.provider || 'unknown';
+        const trafficInfo = route.route?.traffic_info;
+        
+        // Create routing provider badge
+        const providerBadge = this.createProviderBadge(provider);
+        
+        // Create traffic information section
+        let trafficHTML = '';
+        if (trafficInfo && trafficInfo.has_traffic_data) {
+            const delay = trafficInfo.delay_seconds;
+            const delayClass = delay > 300 ? 'traffic-heavy' : delay > 60 ? 'traffic-moderate' : 'traffic-light';
+            const delayText = delay > 0 ? `+${this.formatDuration(delay)} delay` : 'No delays';
+            
+            trafficHTML = `
+                <div class="traffic-info ${delayClass}">
+                    <strong>🚦 Live Traffic:</strong> ${delayText}<br>
+                    <small>Normal time: ${this.formatDuration(trafficInfo.normal_duration)} | With traffic: ${this.formatDuration(trafficInfo.traffic_duration)}</small>
+                </div>
+            `;
+        } else if (provider === 'google_maps') {
+            trafficHTML = `
+                <div class="traffic-info traffic-unavailable">
+                    <strong>🚦 Traffic:</strong> Data unavailable for this route
+                </div>
+            `;
+        }
+        
         let pickupTimesHTML = '';
         if (route.pickupTimes?.pickupTimes && route.pickupTimes.pickupTimes.length > 0) {
             pickupTimesHTML = `
@@ -222,19 +250,60 @@ export class UIManager {
             `;
         }
         
+        // Add route directions if available
+        let directionsHTML = '';
+        if (route.route?.legs && route.route.legs.length > 0) {
+            const hasDetailedSteps = route.route.legs.some(leg => 
+                leg.steps && leg.steps.length > 0 && leg.steps[0].instruction
+            );
+            
+            if (hasDetailedSteps) {
+                directionsHTML = `
+                    <div class="route-directions">
+                        <h4>🗺️ Directions:</h4>
+                        <div class="directions-summary">
+                            ${route.route.legs.map((leg, index) => `
+                                <div class="leg-summary">
+                                    <strong>Leg ${index + 1}:</strong> ${this.formatDistance(leg.distance)} in ${this.formatDuration(leg.duration)}
+                                    ${leg.start_address ? `<br><small>From: ${this.escapeHtml(leg.start_address)}</small>` : ''}
+                                    ${leg.end_address ? `<br><small>To: ${this.escapeHtml(leg.end_address)}</small>` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
         return `
-            <h3>${this.escapeHtml(route.driverName)}</h3>
+            <div class="route-header">
+                <h3>${this.escapeHtml(route.driverName)}</h3>
+                ${providerBadge}
+            </div>
             <div class="route-info">
                 <div class="route-summary">
-                    <strong>Route Summary:</strong><br>
+                    <strong>📊 Route Summary:</strong><br>
                     Departure Time: <strong>${departureTime}</strong><br>
                     Total Distance: <strong>${totalDistance}</strong><br>
                     Total Duration: <strong>${totalDuration}</strong><br>
                     Pickups: <strong>${route.pickups.length}</strong>
                 </div>
+                ${trafficHTML}
                 ${pickupTimesHTML}
+                ${directionsHTML}
             </div>
         `;
+    }
+    
+    createProviderBadge(provider) {
+        const badges = {
+            'google_maps': '<span class="provider-badge google-maps">📍 Google Maps (Live Traffic)</span>',
+            'osrm': '<span class="provider-badge osrm">🗺️ OSRM (Real Roads)</span>',
+            'mock': '<span class="provider-badge mock">📐 Estimated (Straight Line)</span>',
+            'unknown': '<span class="provider-badge unknown">❓ Unknown Provider</span>'
+        };
+        
+        return badges[provider] || badges['unknown'];
     }
     
     formatDuration(seconds) {
