@@ -1,7 +1,14 @@
-// Mock routing service for demonstration (no external API calls)
+// Enhanced routing service with Google Maps Directions API integration
+import { CONFIG, ConfigManager } from './config.js';
+
 export class RoutingService {
     constructor() {
-        // Mock routing that calculates basic routes
+        this.cache = new Map();
+        this.lastRequestTime = 0;
+        this.requestCount = 0;
+        
+        // Log current routing mode
+        console.log(`Routing Service initialized: ${ConfigManager.getRoutingDescription()}`);
     }
     
     /**
@@ -138,6 +145,208 @@ export class RoutingService {
     }
     
     async calculateRoute(coordinates) {
+        const routingMode = ConfigManager.getRoutingMode();
+        console.log(`Calculating route using: ${ConfigManager.getRoutingDescription()}`);
+        
+        // Create cache key for this route
+        const cacheKey = coordinates.map(coord => `${coord[0]},${coord[1]}`).join('|');
+        if (this.cache.has(cacheKey)) {
+            console.log('Using cached route');
+            return this.cache.get(cacheKey);
+        }
+        
+        let route = null;
+        
+        try {
+            switch (routingMode) {
+                case 'google_maps':
+                    route = await this.calculateRouteWithGoogleMaps(coordinates);
+                    break;
+                case 'osrm':
+                    route = await this.calculateRouteWithOSRM(coordinates);
+                    break;
+                default:
+                    route = await this.calculateRouteWithMock(coordinates);
+            }
+            
+            // Cache the result
+            this.cache.set(cacheKey, route);
+            return route;
+            
+        } catch (error) {
+            console.warn(`Routing failed with ${routingMode}, trying fallback:`, error.message);
+            
+            // Try fallback methods
+            if (routingMode === 'google_maps') {
+                try {
+                    route = await this.calculateRouteWithOSRM(coordinates);
+                    this.cache.set(cacheKey, route);
+                    return route;
+                } catch (fallbackError) {
+                    console.warn('OSRM fallback failed, using mock:', fallbackError.message);
+                }
+            }
+            
+            // Final fallback to mock
+            route = await this.calculateRouteWithMock(coordinates);
+            this.cache.set(cacheKey, route);
+            return route;
+        }
+    }
+    
+    /**
+     * Calculate route using Google Maps Directions API with live traffic
+     */
+    async calculateRouteWithGoogleMaps(coordinates) {
+        if (!ConfigManager.isGoogleMapsConfigured()) {
+            throw new Error('Google Maps API key not configured');
+        }
+        
+        // Convert coordinates to Google Maps format
+        const origin = `${coordinates[0][1]},${coordinates[0][0]}`; // lat,lng
+        const destination = `${coordinates[coordinates.length - 1][1]},${coordinates[coordinates.length - 1][0]}`;
+        
+        // Handle waypoints (intermediate stops)
+        let waypoints = '';
+        if (coordinates.length > 2) {
+            const waypointCoords = coordinates.slice(1, -1)
+                .map(coord => `${coord[1]},${coord[0]}`)
+                .join('|');
+            waypoints = `&waypoints=${waypointCoords}`;
+        }
+        
+        // Build request URL
+        const params = new URLSearchParams({
+            origin: origin,
+            destination: destination,
+            key: CONFIG.GOOGLE_MAPS.API_KEY,
+            mode: CONFIG.GOOGLE_MAPS.DEFAULT_OPTIONS.mode,
+            units: CONFIG.GOOGLE_MAPS.DEFAULT_OPTIONS.units,
+            departure_time: CONFIG.GOOGLE_MAPS.DEFAULT_OPTIONS.departure_time,
+            traffic_model: 'best_guess'
+        });
+        
+        if (CONFIG.GOOGLE_MAPS.DEFAULT_OPTIONS.avoid) {
+            params.set('avoid', CONFIG.GOOGLE_MAPS.DEFAULT_OPTIONS.avoid);
+        }
+        
+        const url = `${CONFIG.GOOGLE_MAPS.DIRECTIONS_API_URL}?${params}${waypoints}`;
+        
+        // Make API request
+        await this.respectRateLimit();
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            throw new Error(`Google Maps API error: ${response.status} ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.status !== 'OK') {
+            throw new Error(`Google Maps API status: ${data.status} - ${data.error_message || 'Unknown error'}`);
+        }
+        
+        const route = data.routes[0];
+        const leg = route.legs[0];
+        
+        // Extract route information
+        const totalDistance = route.legs.reduce((sum, leg) => sum + leg.distance.value, 0);
+        const totalDuration = route.legs.reduce((sum, leg) => sum + leg.duration.value, 0);
+        
+        // Get traffic-aware duration if available
+        const trafficDuration = route.legs.reduce((sum, leg) => {
+            return sum + (leg.duration_in_traffic ? leg.duration_in_traffic.value : leg.duration.value);
+        }, 0);
+        
+        // Build detailed legs information
+        const legs = route.legs.map(leg => ({
+            duration: leg.duration_in_traffic ? leg.duration_in_traffic.value : leg.duration.value,
+            distance: leg.distance.value,
+            start_address: leg.start_address,
+            end_address: leg.end_address,
+            steps: leg.steps.map(step => ({
+                instruction: step.html_instructions.replace(/<[^>]*>/g, ''), // Strip HTML
+                duration: step.duration.value,
+                distance: step.distance.value,
+                travel_mode: step.travel_mode
+            }))
+        }));
+        
+        return {
+            duration: trafficDuration,
+            distance: totalDistance,
+            geometry: {
+                type: "LineString",
+                coordinates: this.decodePolyline(route.overview_polyline.points)
+            },
+            legs: legs,
+            provider: 'google_maps',
+            traffic_info: {
+                has_traffic_data: route.legs.some(leg => leg.duration_in_traffic),
+                normal_duration: totalDuration,
+                traffic_duration: trafficDuration,
+                delay_seconds: trafficDuration - totalDuration
+            }
+        };
+    }
+    
+    /**
+     * Calculate route using OSRM (Open Source Routing Machine)
+     */
+    async calculateRouteWithOSRM(coordinates) {
+        if (!CONFIG.OSRM.ENABLED) {
+            throw new Error('OSRM routing is disabled');
+        }
+        
+        // Convert coordinates to OSRM format (lng,lat)
+        const coordString = coordinates.map(coord => `${coord[0]},${coord[1]}`).join(';');
+        const url = `${CONFIG.OSRM.API_URL}/${coordString}?overview=full&steps=true&geometries=geojson`;
+        
+        await this.respectRateLimit();
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            throw new Error(`OSRM API error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.code !== 'Ok') {
+            throw new Error(`OSRM error: ${data.code} - ${data.message || 'Unknown error'}`);
+        }
+        
+        const route = data.routes[0];
+        
+        // Build legs information
+        const legs = route.legs.map(leg => ({
+            duration: leg.duration,
+            distance: leg.distance,
+            steps: leg.steps.map(step => ({
+                instruction: step.maneuver.instruction || `${step.maneuver.type} for ${step.distance}m`,
+                duration: step.duration,
+                distance: step.distance
+            }))
+        }));
+        
+        return {
+            duration: route.duration,
+            distance: route.distance,
+            geometry: route.geometry,
+            legs: legs,
+            provider: 'osrm',
+            traffic_info: {
+                has_traffic_data: false,
+                normal_duration: route.duration,
+                traffic_duration: route.duration,
+                delay_seconds: 0
+            }
+        };
+    }
+    
+    /**
+     * Calculate route using mock/straight-line method (fallback)
+     */
+    async calculateRouteWithMock(coordinates) {
         // Simulate API delay
         await this.delay(800);
         
@@ -156,8 +365,8 @@ export class RoutingService {
                 { lat: end[1], lng: end[0] }
             ) * 1000; // Convert to meters
             
-            // Estimate duration (assuming average speed of 30 km/h in city)
-            const duration = (distance / 1000) * (3600 / 30); // seconds
+            // Estimate duration (assuming average speed from config)
+            const duration = (distance / 1000) * (3600 / CONFIG.APP.MOCK_SPEED_KMH); // seconds
             
             totalDistance += distance;
             totalDuration += duration;
@@ -183,8 +392,73 @@ export class RoutingService {
             duration: totalDuration,
             distance: totalDistance,
             geometry,
-            legs
+            legs,
+            provider: 'mock',
+            traffic_info: {
+                has_traffic_data: false,
+                normal_duration: totalDuration,
+                traffic_duration: totalDuration,
+                delay_seconds: 0
+            }
         };
+    }
+    
+    /**
+     * Decode Google Maps polyline encoding
+     */
+    decodePolyline(encoded) {
+        const poly = [];
+        let index = 0;
+        const len = encoded.length;
+        let lat = 0;
+        let lng = 0;
+        
+        while (index < len) {
+            let b;
+            let shift = 0;
+            let result = 0;
+            
+            do {
+                b = encoded.charCodeAt(index++) - 63;
+                result |= (b & 0x1f) << shift;
+                shift += 5;
+            } while (b >= 0x20);
+            
+            const dlat = ((result & 1) !== 0 ? ~(result >> 1) : (result >> 1));
+            lat += dlat;
+            
+            shift = 0;
+            result = 0;
+            
+            do {
+                b = encoded.charCodeAt(index++) - 63;
+                result |= (b & 0x1f) << shift;
+                shift += 5;
+            } while (b >= 0x20);
+            
+            const dlng = ((result & 1) !== 0 ? ~(result >> 1) : (result >> 1));
+            lng += dlng;
+            
+            poly.push([lng / 1e5, lat / 1e5]);
+        }
+        
+        return poly;
+    }
+    
+    /**
+     * Respect API rate limits
+     */
+    async respectRateLimit() {
+        const now = Date.now();
+        const timeSinceLastRequest = now - this.lastRequestTime;
+        
+        // Limit to 10 requests per second for Google Maps
+        if (timeSinceLastRequest < 100) {
+            await this.delay(100 - timeSinceLastRequest);
+        }
+        
+        this.lastRequestTime = Date.now();
+        this.requestCount++;
     }
     
     async calculateAllRoutes(data, assignments) {

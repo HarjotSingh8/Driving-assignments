@@ -4,6 +4,7 @@ import { GeocodingService } from './geocodingService.js';
 import { RoutingService } from './routingService.js';
 import { MapManager } from './mapManager.js';
 import { UIManager } from './uiManager.js';
+import { ConfigManager } from './config.js';
 
 class DrivingAssignmentsApp {
     constructor() {
@@ -22,7 +23,9 @@ class DrivingAssignmentsApp {
     init() {
         this.setupEventListeners();
         this.loadStoredData();
+        this.loadApiKey();
         this.uiManager.updateUI(this.dataManager.getData());
+        this.updateRoutingStatus();
     }
     
     setupEventListeners() {
@@ -35,6 +38,10 @@ class DrivingAssignmentsApp {
         document.getElementById('geocodeDestination').addEventListener('click', () => this.handleDestinationGeocode());
         document.getElementById('addDriver').addEventListener('click', () => this.handleAddDriver());
         document.getElementById('addPickup').addEventListener('click', () => this.handleAddPickup());
+        
+        // Routing configuration
+        document.getElementById('saveApiKey').addEventListener('click', () => this.handleSaveApiKey());
+        document.getElementById('clearApiKey').addEventListener('click', () => this.handleClearApiKey());
         
         // Assignment page
         document.getElementById('calculateRoutes').addEventListener('click', () => this.handleCalculateRoutes());
@@ -178,6 +185,41 @@ class DrivingAssignmentsApp {
         this.saveData();
     }
     
+    handleSaveApiKey() {
+        const apiKey = document.getElementById('googleMapsApiKey').value.trim();
+        
+        if (!apiKey) {
+            this.showRoutingStatus('Please enter an API key', 'error');
+            return;
+        }
+        
+        // Save to config and localStorage
+        ConfigManager.setGoogleMapsApiKey(apiKey);
+        localStorage.setItem('googleMapsApiKey', apiKey);
+        
+        // Clear the input for security
+        document.getElementById('googleMapsApiKey').value = '';
+        
+        // Create new routing service with updated config
+        this.routingService = new RoutingService();
+        
+        this.showRoutingStatus(`API key saved! Now using: ${ConfigManager.getRoutingDescription()}`, 'success');
+    }
+    
+    handleClearApiKey() {
+        // Clear from config and localStorage
+        ConfigManager.setGoogleMapsApiKey('');
+        localStorage.removeItem('googleMapsApiKey');
+        
+        // Clear the input
+        document.getElementById('googleMapsApiKey').value = '';
+        
+        // Create new routing service with updated config
+        this.routingService = new RoutingService();
+        
+        this.showRoutingStatus(`API key cleared. Now using: ${ConfigManager.getRoutingDescription()}`, 'success');
+    }
+    
     async handleCalculateRoutes() {
         const data = this.dataManager.getData();
         
@@ -268,6 +310,10 @@ class DrivingAssignmentsApp {
         element.className = `status ${type}`;
     }
     
+    showRoutingStatus(message, type) {
+        this.showStatus('routingStatus', message, type);
+    }
+    
     showLoading(show) {
         if (show) {
             this.loadingOverlay.classList.add('active');
@@ -296,6 +342,35 @@ class DrivingAssignmentsApp {
                 );
             }
         }
+    }
+    
+    loadApiKey() {
+        const storedApiKey = localStorage.getItem('googleMapsApiKey');
+        if (storedApiKey) {
+            ConfigManager.setGoogleMapsApiKey(storedApiKey);
+            // Don't populate the input field for security reasons
+        }
+    }
+    
+    updateRoutingStatus() {
+        const mode = ConfigManager.getRoutingMode();
+        const description = ConfigManager.getRoutingDescription();
+        
+        let statusType = 'info';
+        let statusMessage = `Current routing: ${description}`;
+        
+        if (mode === 'google_maps') {
+            statusType = 'success';
+            statusMessage = `✅ ${description}`;
+        } else if (mode === 'osrm') {
+            statusType = 'warning';
+            statusMessage = `⚠️ ${description} (Add Google Maps API key for live traffic)`;
+        } else {
+            statusType = 'warning';
+            statusMessage = `⚠️ ${description} (Add Google Maps API key for real routing)`;
+        }
+        
+        this.showRoutingStatus(statusMessage, statusType);
     }
 }
 

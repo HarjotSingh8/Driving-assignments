@@ -53,6 +53,29 @@
                     </div>
                     <div id="pickupsList" class="items-list"></div>
                 </div>
+
+                <div class="form-section">
+                    <h2>🗺️ Routing Configuration</h2>
+                    <div id="routingStatus" class="status"></div>
+                    <div class="routing-config">
+                        <div class="config-group">
+                            <label for="googleMapsApiKey">Google Maps API Key (for live traffic):</label>
+                            <div class="input-group">
+                                <input type="password" id="googleMapsApiKey" placeholder="Enter your Google Maps API key (optional)">
+                                <button id="saveApiKey">Save</button>
+                                <button id="clearApiKey">Clear</button>
+                            </div>
+                            <div class="help-text">
+                                <small>
+                                    📍 <strong>With API key:</strong> Real routing with live traffic data<br>
+                                    🗺️ <strong>Without API key:</strong> Falls back to OSRM (real roads, no traffic)<br>
+                                    📐 <strong>Offline mode:</strong> Straight-line distance estimates<br>
+                                    <a href="GOOGLE_MAPS_SETUP.md" target="_blank">📚 Setup Guide</a>
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </section>
 
             <!-- Assignment Page -->
