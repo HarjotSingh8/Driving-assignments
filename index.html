@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Driving Assignments</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Driving Assignments</h1>
+            <nav>
+                <button id="setupBtn" class="nav-btn active">Setup</button>
+                <button id="assignBtn" class="nav-btn">Assign</button>
+                <button id="routeBtn" class="nav-btn">Routes</button>
+            </nav>
+        </header>
+
+        <main>
+            <!-- Setup Page -->
+            <section id="setupPage" class="page active">
+                <div class="form-section">
+                    <h2>Destination</h2>
+                    <div class="input-group">
+                        <input type="text" id="destinationAddress" placeholder="Enter destination address">
+                        <input type="datetime-local" id="arrivalTime" required>
+                        <button id="geocodeDestination">Set Destination</button>
+                    </div>
+                    <div id="destinationStatus" class="status"></div>
+                </div>
+
+                <div class="form-section">
+                    <h2>Drivers</h2>
+                    <div class="input-group">
+                        <input type="text" id="driverName" placeholder="Driver name">
+                        <input type="text" id="driverAddress" placeholder="Driver address">
+                        <button id="addDriver">Add Driver</button>
+                    </div>
+                    <div id="driversList" class="items-list"></div>
+                </div>
+
+                <div class="form-section">
+                    <h2>Pickup Locations</h2>
+                    <div class="input-group">
+                        <input type="text" id="pickupName" placeholder="Person name">
+                        <input type="text" id="pickupAddress" placeholder="Pickup address">
+                        <button id="addPickup">Add Pickup</button>
+                    </div>
+                    <div id="pickupsList" class="items-list"></div>
+                </div>
+            </section>
+
+            <!-- Assignment Page -->
+            <section id="assignPage" class="page">
+                <h2>Assign Pickups to Drivers</h2>
+                <div id="assignmentInterface"></div>
+                <button id="calculateRoutes" class="primary-btn">Calculate Routes</button>
+            </section>
+
+            <!-- Routing Page -->
+            <section id="routePage" class="page">
+                <h2>Routes and Pickup Times</h2>
+                <div id="routeResults"></div>
+                <div id="mapContainer">
+                    <div id="map"></div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="spinner"></div>
+        <p>Processing...</p>
+    </div>
+
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
