@@ -150,8 +150,6 @@ export class MapManager {
             
             // Add pickup markers and route lines
             if (route.pickups.length > 0) {
-                const routeCoordinates = [[driver.coordinates.lat, driver.coordinates.lng]];
-                
                 route.pickups.forEach((pickup, pickupIndex) => {
                     // Add pickup marker
                     const pickupTime = route.pickupTimes?.pickupTimes?.[pickupIndex];
@@ -174,54 +172,14 @@ export class MapManager {
                     pickupMarker.setIcon(pickupIcon);
                     
                     this.markers.push(pickupMarker);
-                    routeCoordinates.push([pickup.coordinates.lat, pickup.coordinates.lng]);
                     allCoordinates.push([pickup.coordinates.lat, pickup.coordinates.lng]);
                 });
                 
-                // Add destination to route
-                if (data.destination) {
-                    routeCoordinates.push([data.destination.coordinates.lat, data.destination.coordinates.lng]);
-                }
-                
-                // Draw route line
-                const routeLine = L.polyline(routeCoordinates, {
-                    color: color,
-                    weight: 4,
-                    opacity: 0.7,
-                    dashArray: route.pickups.length > 0 ? null : '10, 10'
-                }).addTo(this.map);
-                
-                routeLine.bindPopup(`
-                    <b>Route: ${this.escapeHtml(route.driverName)}</b><br>
-                    Distance: ${this.formatDistance(route.totalDistance)}<br>
-                    Duration: ${this.formatDuration(route.totalDuration)}<br>
-                    Stops: ${route.pickups.length}
-                `);
-                
-                this.routeLines.push(routeLine);
-                
+                // Draw actual route path using geometry from routing service
+                this.drawRouteGeometry(route.route, color, route.driverName, route.totalDistance, route.totalDuration, route.pickups.length);
             } else {
-                // Driver with no pickups - direct route to destination
-                if (data.destination) {
-                    const directRoute = L.polyline([
-                        [driver.coordinates.lat, driver.coordinates.lng],
-                        [data.destination.coordinates.lat, data.destination.coordinates.lng]
-                    ], {
-                        color: color,
-                        weight: 3,
-                        opacity: 0.5,
-                        dashArray: '10, 10'
-                    }).addTo(this.map);
-                    
-                    directRoute.bindPopup(`
-                        <b>Direct Route: ${this.escapeHtml(route.driverName)}</b><br>
-                        Distance: ${this.formatDistance(route.totalDistance)}<br>
-                        Duration: ${this.formatDuration(route.totalDuration)}<br>
-                        No pickups assigned
-                    `);
-                    
-                    this.routeLines.push(directRoute);
-                }
+                // Driver with no pickups - draw direct route using actual geometry
+                this.drawRouteGeometry(route.route, color, route.driverName, route.totalDistance, route.totalDuration, 0);
             }
         });
         
@@ -283,14 +241,156 @@ export class MapManager {
                     
                     <div style="margin-top: 10px; padding: 8px; background: rgba(0,0,0,0.05); border-radius: 4px; font-size: 0.9em;">
                         📏 Distance: <strong>${this.formatDistance(route.totalDistance)}</strong> | 
-                        ⏱️ Duration: <strong>${this.formatDuration(route.totalDuration)}</strong>
+                        ⏱️ Duration: <strong>${this.formatDuration(route.totalDuration)}</strong><br>
+                        🗺️ Route: <strong>${this.getProviderDisplayName(route.route?.provider || 'unknown')}</strong>
+                        ${this.getRouteQualityInfo(route.route)}
+                        ${this.getTrafficInfo(route.route)}
                     </div>
+                    ${this.getRoutePathInfo(route.route)}
                 </div>
             `;
         });
         
         mapContent.innerHTML = html;
         this.updateFallbackLegend(routes);
+    }
+    
+    /**
+     * Get route quality information for fallback display
+     */
+    getRouteQualityInfo(routeData) {
+        if (!routeData) return '';
+        
+        if (routeData.provider === 'google_maps') {
+            return '<br><small style="color: green;">✅ Real roads with live traffic data</small>';
+        } else if (routeData.provider === 'osrm') {
+            return '<br><small style="color: blue;">🗺️ Real roads, no traffic data</small>';
+        } else if (routeData.provider === 'mock') {
+            return '<br><small style="color: orange;">⚠️ Estimated straight-line distance</small>';
+        }
+        return '';
+    }
+    
+    /**
+     * Get traffic information for fallback display
+     */
+    getTrafficInfo(routeData) {
+        if (!routeData || !routeData.traffic_info || !routeData.traffic_info.has_traffic_data) {
+            return '';
+        }
+        
+        const delayMinutes = Math.round(routeData.traffic_info.delay_seconds / 60);
+        if (delayMinutes > 0) {
+            return `<br><small style="color: orange;">🚨 Current traffic delay: ${delayMinutes} minutes</small>`;
+        } else {
+            return '<br><small style="color: green;">🚀 No traffic delays detected</small>';
+        }
+    }
+    
+    /**
+     * Get route path information for fallback display
+     */
+    getRoutePathInfo(routeData) {
+        if (!routeData || !routeData.geometry || routeData.provider === 'mock') {
+            return '';
+        }
+        
+        const coordinateCount = routeData.geometry.coordinates ? routeData.geometry.coordinates.length : 0;
+        
+        if (coordinateCount > 2) {
+            return `
+                <div style="margin-top: 8px; padding: 8px; background: rgba(0,100,200,0.1); border-radius: 4px; border-left: 3px solid #0064c8;">
+                    <small><strong>🛣️ Route Path Details:</strong></small><br>
+                    <small>• ${coordinateCount} coordinate points defining the actual route path</small><br>
+                    <small>• Following real roads and traffic patterns</small><br>
+                    <small>• ${routeData.provider === 'google_maps' ? 'Optimized based on current traffic conditions' : 'Based on OpenStreetMap road network'}</small>
+                </div>
+            `;
+        }
+        
+        return '';
+    }
+    
+    /**
+     * Draw route using actual geometry from routing service
+     */
+    drawRouteGeometry(routeData, color, driverName, totalDistance, totalDuration, pickupCount) {
+        if (!routeData || !routeData.geometry) {
+            console.warn('No route geometry available, falling back to straight line');
+            return;
+        }
+        
+        // Convert geometry coordinates to Leaflet format [lat, lng]
+        let routeCoordinates;
+        
+        if (routeData.geometry.type === 'LineString') {
+            // Convert from [lng, lat] to [lat, lng] for Leaflet
+            routeCoordinates = routeData.geometry.coordinates.map(coord => [coord[1], coord[0]]);
+        } else {
+            console.warn('Unsupported geometry type:', routeData.geometry.type);
+            return;
+        }
+        
+        // Determine route style based on provider and pickup count
+        const routeStyle = {
+            color: color,
+            weight: pickupCount > 0 ? 4 : 3,
+            opacity: pickupCount > 0 ? 0.8 : 0.6,
+            dashArray: pickupCount === 0 ? '10, 10' : null
+        };
+        
+        // Add route provider badge to style for different providers
+        if (routeData.provider === 'google_maps') {
+            routeStyle.className = 'route-google-maps';
+        } else if (routeData.provider === 'osrm') {
+            routeStyle.className = 'route-osrm';
+        } else if (routeData.provider === 'mock') {
+            routeStyle.className = 'route-mock';
+            routeStyle.dashArray = '5, 5'; // Shorter dashes for mock routes
+            routeStyle.opacity = 0.5;
+        }
+        
+        // Create the route line
+        const routeLine = L.polyline(routeCoordinates, routeStyle).addTo(this.map);
+        
+        // Create popup content with route details
+        let popupContent = `
+            <b>${pickupCount === 0 ? 'Direct Route' : 'Route'}: ${this.escapeHtml(driverName)}</b><br>
+            Distance: ${this.formatDistance(totalDistance)}<br>
+            Duration: ${this.formatDuration(totalDuration)}<br>
+            ${pickupCount === 0 ? 'No pickups assigned' : `Stops: ${pickupCount}`}<br>
+            <small>Provider: ${this.getProviderDisplayName(routeData.provider)}</small>
+        `;
+        
+        // Add traffic information if available
+        if (routeData.traffic_info && routeData.traffic_info.has_traffic_data) {
+            const delayMinutes = Math.round(routeData.traffic_info.delay_seconds / 60);
+            if (delayMinutes > 0) {
+                popupContent += `<br><small style="color: orange;">⚠️ Traffic delay: ${delayMinutes} min</small>`;
+            } else {
+                popupContent += `<br><small style="color: green;">✅ No traffic delays</small>`;
+            }
+        }
+        
+        routeLine.bindPopup(popupContent);
+        
+        this.routeLines.push(routeLine);
+    }
+    
+    /**
+     * Get user-friendly provider display name
+     */
+    getProviderDisplayName(provider) {
+        switch (provider) {
+            case 'google_maps':
+                return '🌍 Google Maps (Live Traffic)';
+            case 'osrm':
+                return '🗺️ OSRM (Real Roads)';
+            case 'mock':
+                return '📐 Estimated (Straight Line)';
+            default:
+                return provider;
+        }
     }
     
     updateLeafletLegend(routes) {
