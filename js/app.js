@@ -206,9 +206,11 @@ class DrivingAssignmentsApp {
             this.dataManager.setRoutes(routes);
             
             this.uiManager.renderRouteResults(this.dataManager.getData());
-            this.mapManager.displayRoutes(routes, data);
             
             this.showPage('route');
+            
+            // Display routes on map after page is shown and map is initialized
+            this.mapManager.displayRoutes(routes, data);
             this.saveData();
         } catch (error) {
             alert('Failed to calculate routes: ' + error.message);
