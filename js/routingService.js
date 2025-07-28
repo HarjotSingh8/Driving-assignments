@@ -4,6 +4,139 @@ export class RoutingService {
         // Mock routing that calculates basic routes
     }
     
+    /**
+     * Automatically allocate pickups to drivers to minimize total travel distance
+     */
+    async autoAllocatePickups(data) {
+        const { drivers, pickups, destination } = data;
+        
+        if (!drivers.length || !pickups.length || !destination) {
+            throw new Error('Missing required data for auto-allocation');
+        }
+        
+        // Use greedy nearest neighbor approach with load balancing
+        const allocation = await this.greedyAllocationWithBalancing(drivers, pickups, destination);
+        
+        return allocation;
+    }
+    
+    /**
+     * Greedy allocation algorithm that considers both distance and load balancing
+     */
+    async greedyAllocationWithBalancing(drivers, pickups, destination) {
+        const allocation = {};
+        const driverLoads = {};
+        
+        // Initialize allocation and load tracking
+        drivers.forEach(driver => {
+            allocation[driver.id] = [];
+            driverLoads[driver.id] = 0;
+        });
+        
+        // Calculate max pickup load per driver (balanced distribution)
+        const maxPickupsPerDriver = Math.ceil(pickups.length / drivers.length);
+        
+        // Create a copy of pickups to work with
+        const remainingPickups = [...pickups];
+        
+        while (remainingPickups.length > 0) {
+            let bestAllocation = null;
+            let bestScore = Infinity;
+            
+            // For each remaining pickup, find the best driver assignment
+            for (let i = 0; i < remainingPickups.length; i++) {
+                const pickup = remainingPickups[i];
+                
+                for (const driver of drivers) {
+                    // Skip if driver already has maximum load
+                    if (driverLoads[driver.id] >= maxPickupsPerDriver && 
+                        remainingPickups.length > drivers.filter(d => driverLoads[d.id] < maxPickupsPerDriver).length) {
+                        continue;
+                    }
+                    
+                    // Calculate score (distance + load balancing penalty)
+                    const distance = this.calculateDistance(driver.coordinates, pickup.coordinates);
+                    const loadPenalty = driverLoads[driver.id] * 2; // Penalty for overloading
+                    const score = distance + loadPenalty;
+                    
+                    if (score < bestScore) {
+                        bestScore = score;
+                        bestAllocation = {
+                            pickup,
+                            pickupIndex: i,
+                            driverId: driver.id
+                        };
+                    }
+                }
+            }
+            
+            // Apply the best allocation found
+            if (bestAllocation) {
+                allocation[bestAllocation.driverId].push(bestAllocation.pickup.id);
+                driverLoads[bestAllocation.driverId]++;
+                remainingPickups.splice(bestAllocation.pickupIndex, 1);
+            } else {
+                // Fallback: assign to driver with least load
+                const leastLoadedDriver = drivers.reduce((min, driver) => 
+                    driverLoads[driver.id] < driverLoads[min.id] ? driver : min
+                );
+                allocation[leastLoadedDriver.id].push(remainingPickups[0].id);
+                driverLoads[leastLoadedDriver.id]++;
+                remainingPickups.splice(0, 1);
+            }
+        }
+        
+        return allocation;
+    }
+    
+    /**
+     * Alternative allocation using geographic clustering
+     */
+    async clusterBasedAllocation(drivers, pickups, destination) {
+        const allocation = {};
+        drivers.forEach(driver => allocation[driver.id] = []);
+        
+        if (pickups.length === 0) return allocation;
+        
+        // Calculate centroid of all pickups
+        const centroid = this.calculateCentroid(pickups.map(p => p.coordinates));
+        
+        // For each pickup, find the closest driver
+        pickups.forEach(pickup => {
+            let closestDriver = drivers[0];
+            let minDistance = this.calculateDistance(drivers[0].coordinates, pickup.coordinates);
+            
+            drivers.forEach(driver => {
+                const distance = this.calculateDistance(driver.coordinates, pickup.coordinates);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestDriver = driver;
+                }
+            });
+            
+            allocation[closestDriver.id].push(pickup.id);
+        });
+        
+        return allocation;
+    }
+    
+    /**
+     * Calculate geographic centroid of coordinates
+     */
+    calculateCentroid(coordinates) {
+        if (coordinates.length === 0) return { lat: 0, lng: 0 };
+        
+        const sum = coordinates.reduce((acc, coord) => ({
+            lat: acc.lat + coord.lat,
+            lng: acc.lng + coord.lng
+        }), { lat: 0, lng: 0 });
+        
+        return {
+            lat: sum.lat / coordinates.length,
+            lng: sum.lng / coordinates.length
+        };
+    }
+    
     async calculateRoute(coordinates) {
         // Simulate API delay
         await this.delay(800);
