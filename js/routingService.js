@@ -145,7 +145,6 @@ export class RoutingService {
     }
     
     async calculateRoute(coordinates) {
-        const routingMode = ConfigManager.getRoutingMode();
         console.log(`Calculating route using: ${ConfigManager.getRoutingDescription()}`);
         
         // Create cache key for this route
@@ -155,43 +154,59 @@ export class RoutingService {
             return this.cache.get(cacheKey);
         }
         
-        let route = null;
+        // Try routing methods in priority order with comprehensive fallback
+        const route = await this.calculateRouteWithFallback(coordinates);
         
-        try {
-            switch (routingMode) {
-                case 'google_maps':
-                    route = await this.calculateRouteWithGoogleMaps(coordinates);
-                    break;
-                case 'osrm':
-                    route = await this.calculateRouteWithOSRM(coordinates);
-                    break;
-                default:
-                    route = await this.calculateRouteWithMock(coordinates);
-            }
-            
-            // Cache the result
-            this.cache.set(cacheKey, route);
-            return route;
-            
-        } catch (error) {
-            console.warn(`Routing failed with ${routingMode}, trying fallback:`, error.message);
-            
-            // Try fallback methods
-            if (routingMode === 'google_maps') {
-                try {
-                    route = await this.calculateRouteWithOSRM(coordinates);
-                    this.cache.set(cacheKey, route);
-                    return route;
-                } catch (fallbackError) {
-                    console.warn('OSRM fallback failed, using mock:', fallbackError.message);
-                }
-            }
-            
-            // Final fallback to mock
-            route = await this.calculateRouteWithMock(coordinates);
-            this.cache.set(cacheKey, route);
-            return route;
+        // Cache the result
+        this.cache.set(cacheKey, route);
+        return route;
+    }
+    
+    /**
+     * Calculate route with comprehensive fallback system
+     * Priority order: Google Maps (if configured) → OSRM → Mock
+     */
+    async calculateRouteWithFallback(coordinates) {
+        const methods = [];
+        
+        // Build prioritized list of routing methods to try
+        if (ConfigManager.isGoogleMapsConfigured()) {
+            methods.push({
+                name: 'Google Maps',
+                method: () => this.calculateRouteWithGoogleMaps(coordinates)
+            });
         }
+        
+        if (CONFIG.OSRM.ENABLED) {
+            methods.push({
+                name: 'OSRM',
+                method: () => this.calculateRouteWithOSRM(coordinates)
+            });
+        }
+        
+        // Mock routing is always available as final fallback
+        methods.push({
+            name: 'Mock',
+            method: () => this.calculateRouteWithMock(coordinates)
+        });
+        
+        // Try each method in order until one succeeds
+        let lastError = null;
+        for (const { name, method } of methods) {
+            try {
+                console.log(`Attempting routing with: ${name}`);
+                const route = await method();
+                console.log(`✅ Routing successful with: ${name} (${route.provider})`);
+                return route;
+            } catch (error) {
+                console.warn(`❌ ${name} routing failed:`, error.message);
+                lastError = error;
+                // Continue to next method
+            }
+        }
+        
+        // This should never happen since mock routing should always work
+        throw new Error(`All routing methods failed. Last error: ${lastError?.message || 'Unknown error'}`);
     }
     
     /**
