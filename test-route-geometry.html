@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Route Geometry Test</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin=""/>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1200px; margin: 20px auto; padding: 20px; }
+        .test-section { border: 1px solid #ddd; margin: 20px 0; padding: 20px; border-radius: 5px; }
+        .result { margin: 10px 0; padding: 10px; border-radius: 3px; }
+        .success { background-color: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .error { background-color: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .info { background-color: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 3px; cursor: pointer; margin: 5px; }
+        button:hover { background: #0056b3; }
+        #map { height: 400px; width: 100%; border: 1px solid #ddd; border-radius: 5px; }
+        .map-container { margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <h1>🗺️ Route Geometry Display Test</h1>
+    <p>This page tests the enhanced route geometry display functionality.</p>
+    
+    <div class="test-section">
+        <h2>Test Scenario: Central Park → Brooklyn Bridge → Times Square</h2>
+        <button onclick="testMockRouting()">Test Mock Routing (Straight Lines)</button>
+        <button onclick="testSimulatedOSRM()">Test Simulated OSRM Routing</button>
+        <button onclick="testSimulatedGoogleMaps()">Test Simulated Google Maps Routing</button>
+        <button onclick="clearMap()">Clear Map</button>
+        <div id="testResults"></div>
+    </div>
+    
+    <div class="map-container">
+        <h3>Route Visualization</h3>
+        <div id="map"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Fallback Display Test</h2>
+        <div id="fallbackDisplay"></div>
+    </div>
+
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+
+    <script type="module">
+        import { MapManager } from './js/mapManager.js';
+        
+        // Initialize map manager
+        const mapManager = new MapManager();
+        window.mapManager = mapManager;
+        
+        // Sample route data for testing
+        const testData = {
+            destination: {
+                address: "Times Square, New York, NY",
+                coordinates: { lat: 40.758, lng: -73.9855 },
+                arrivalTime: "2024-12-28T15:00:00"
+            },
+            drivers: [{
+                id: "driver1",
+                name: "John Smith",
+                address: "Central Park, New York, NY",
+                coordinates: { lat: 40.7829, lng: -73.9654 }
+            }],
+            pickups: [{
+                id: "pickup1",
+                name: "Alice Johnson",
+                address: "Brooklyn Bridge, New York, NY",
+                coordinates: { lat: 40.7061, lng: -73.9969 }
+            }]
+        };
+        
+        // Mock routing data (straight lines)
+        const mockRouteData = {
+            duration: 1740, // 29 minutes
+            distance: 14800, // 14.8 km
+            geometry: {
+                type: "LineString",
+                coordinates: [
+                    [-73.9654, 40.7829], // Central Park
+                    [-73.9969, 40.7061], // Brooklyn Bridge
+                    [-73.9855, 40.758]   // Times Square
+                ]
+            },
+            provider: 'mock',
+            traffic_info: {
+                has_traffic_data: false,
+                normal_duration: 1740,
+                traffic_duration: 1740,
+                delay_seconds: 0
+            }
+        };
+        
+        // Simulated OSRM routing data with realistic path
+        const osrmRouteData = {
+            duration: 2100, // 35 minutes (more realistic)
+            distance: 16200, // 16.2 km
+            geometry: {
+                type: "LineString",
+                coordinates: [
+                    [-73.9654, 40.7829], // Central Park
+                    [-73.9652, 40.7825],
+                    [-73.9650, 40.7820],
+                    [-73.9655, 40.7815], // Following roads south
+                    [-73.9660, 40.7810],
+                    [-73.9665, 40.7800],
+                    [-73.9670, 40.7790],
+                    [-73.9680, 40.7780],
+                    [-73.9690, 40.7770],
+                    [-73.9700, 40.7750],
+                    [-73.9720, 40.7720],
+                    [-73.9750, 40.7680],
+                    [-73.9780, 40.7640],
+                    [-73.9820, 40.7580],
+                    [-73.9850, 40.7520],
+                    [-73.9880, 40.7460],
+                    [-73.9900, 40.7400],
+                    [-73.9920, 40.7350],
+                    [-73.9940, 40.7300],
+                    [-73.9950, 40.7250],
+                    [-73.9960, 40.7200],
+                    [-73.9965, 40.7150],
+                    [-73.9968, 40.7100],
+                    [-73.9969, 40.7061], // Brooklyn Bridge
+                    [-73.9965, 40.7070],
+                    [-73.9960, 40.7080], // Path back towards Times Square
+                    [-73.9955, 40.7090],
+                    [-73.9950, 40.7100],
+                    [-73.9945, 40.7120],
+                    [-73.9940, 40.7140],
+                    [-73.9935, 40.7160],
+                    [-73.9930, 40.7180],
+                    [-73.9925, 40.7200],
+                    [-73.9920, 40.7220],
+                    [-73.9915, 40.7240],
+                    [-73.9910, 40.7260],
+                    [-73.9905, 40.7280],
+                    [-73.9900, 40.7300],
+                    [-73.9895, 40.7320],
+                    [-73.9890, 40.7340],
+                    [-73.9885, 40.7360],
+                    [-73.9880, 40.7380],
+                    [-73.9875, 40.7400],
+                    [-73.9870, 40.7420],
+                    [-73.9865, 40.7440],
+                    [-73.9860, 40.7460],
+                    [-73.9855, 40.7480],
+                    [-73.9855, 40.7500],
+                    [-73.9855, 40.7520],
+                    [-73.9855, 40.7540],
+                    [-73.9855, 40.758]   // Times Square
+                ]
+            },
+            provider: 'osrm',
+            traffic_info: {
+                has_traffic_data: false,
+                normal_duration: 2100,
+                traffic_duration: 2100,
+                delay_seconds: 0
+            }
+        };
+        
+        // Simulated Google Maps routing data with traffic
+        const googleMapsRouteData = {
+            duration: 2340, // 39 minutes (with traffic)
+            distance: 15800, // 15.8 km
+            geometry: {
+                type: "LineString",
+                coordinates: [
+                    [-73.9654, 40.7829], // Central Park
+                    [-73.9651, 40.7826],
+                    [-73.9648, 40.7823], // More detailed path
+                    [-73.9645, 40.7820],
+                    [-73.9642, 40.7817],
+                    [-73.9640, 40.7814],
+                    [-73.9638, 40.7811],
+                    [-73.9636, 40.7808],
+                    [-73.9635, 40.7805],
+                    [-73.9634, 40.7802],
+                    [-73.9633, 40.7799],
+                    [-73.9632, 40.7796],
+                    [-73.9631, 40.7793],
+                    [-73.9630, 40.7790],
+                    [-73.9635, 40.7785], // Following streets
+                    [-73.9640, 40.7780],
+                    [-73.9645, 40.7775],
+                    [-73.9650, 40.7770],
+                    [-73.9655, 40.7765],
+                    [-73.9660, 40.7760],
+                    [-73.9665, 40.7755],
+                    [-73.9670, 40.7750],
+                    [-73.9675, 40.7745],
+                    [-73.9680, 40.7740],
+                    [-73.9685, 40.7735],
+                    [-73.9690, 40.7730],
+                    [-73.9695, 40.7725],
+                    [-73.9700, 40.7720],
+                    [-73.9710, 40.7710],
+                    [-73.9720, 40.7700],
+                    [-73.9730, 40.7690],
+                    [-73.9740, 40.7680],
+                    [-73.9750, 40.7670],
+                    [-73.9760, 40.7660],
+                    [-73.9770, 40.7650],
+                    [-73.9780, 40.7640],
+                    [-73.9790, 40.7630],
+                    [-73.9800, 40.7620],
+                    [-73.9810, 40.7610],
+                    [-73.9820, 40.7600],
+                    [-73.9830, 40.7590],
+                    [-73.9840, 40.7580],
+                    [-73.9850, 40.7570],
+                    [-73.9860, 40.7560],
+                    [-73.9870, 40.7550],
+                    [-73.9880, 40.7540],
+                    [-73.9885, 40.7530],
+                    [-73.9890, 40.7520],
+                    [-73.9895, 40.7510],
+                    [-73.9900, 40.7500],
+                    [-73.9905, 40.7490],
+                    [-73.9910, 40.7480],
+                    [-73.9915, 40.7470],
+                    [-73.9920, 40.7460],
+                    [-73.9925, 40.7450],
+                    [-73.9930, 40.7440],
+                    [-73.9935, 40.7430],
+                    [-73.9940, 40.7420],
+                    [-73.9945, 40.7410],
+                    [-73.9950, 40.7400],
+                    [-73.9955, 40.7390],
+                    [-73.9960, 40.7380],
+                    [-73.9965, 40.7370],
+                    [-73.9968, 40.7360],
+                    [-73.9970, 40.7350],
+                    [-73.9972, 40.7340],
+                    [-73.9974, 40.7330],
+                    [-73.9976, 40.7320],
+                    [-73.9978, 40.7310],
+                    [-73.9980, 40.7300],
+                    [-73.9982, 40.7290],
+                    [-73.9984, 40.7280],
+                    [-73.9985, 40.7270],
+                    [-73.9986, 40.7260],
+                    [-73.9987, 40.7250],
+                    [-73.9988, 40.7240],
+                    [-73.9989, 40.7230],
+                    [-73.9990, 40.7220],
+                    [-73.9991, 40.7210],
+                    [-73.9992, 40.7200],
+                    [-73.9993, 40.7190],
+                    [-73.9994, 40.7180],
+                    [-73.9995, 40.7170],
+                    [-73.9996, 40.7160],
+                    [-73.9997, 40.7150],
+                    [-73.9998, 40.7140],
+                    [-73.9999, 40.7130],
+                    [-74.0000, 40.7120],
+                    [-74.0001, 40.7110],
+                    [-74.0000, 40.7100],
+                    [-73.9999, 40.7090],
+                    [-73.9998, 40.7080],
+                    [-73.9997, 40.7070],
+                    [-73.9969, 40.7061], // Brooklyn Bridge
+                    [-73.9970, 40.7065], // Return path to Times Square
+                    [-73.9971, 40.7070],
+                    [-73.9972, 40.7075],
+                    [-73.9973, 40.7080],
+                    [-73.9974, 40.7085],
+                    [-73.9975, 40.7090],
+                    [-73.9976, 40.7095],
+                    [-73.9977, 40.7100],
+                    [-73.9976, 40.7105],
+                    [-73.9975, 40.7110],
+                    [-73.9974, 40.7115],
+                    [-73.9973, 40.7120],
+                    [-73.9972, 40.7125],
+                    [-73.9971, 40.7130],
+                    [-73.9970, 40.7135],
+                    [-73.9969, 40.7140],
+                    [-73.9968, 40.7145],
+                    [-73.9967, 40.7150],
+                    [-73.9966, 40.7155],
+                    [-73.9965, 40.7160],
+                    [-73.9964, 40.7165],
+                    [-73.9963, 40.7170],
+                    [-73.9962, 40.7175],
+                    [-73.9961, 40.7180],
+                    [-73.9960, 40.7185],
+                    [-73.9959, 40.7190],
+                    [-73.9958, 40.7195],
+                    [-73.9957, 40.7200],
+                    [-73.9956, 40.7210],
+                    [-73.9955, 40.7220],
+                    [-73.9954, 40.7230],
+                    [-73.9953, 40.7240],
+                    [-73.9952, 40.7250],
+                    [-73.9951, 40.7260],
+                    [-73.9950, 40.7270],
+                    [-73.9949, 40.7280],
+                    [-73.9948, 40.7290],
+                    [-73.9947, 40.7300],
+                    [-73.9946, 40.7310],
+                    [-73.9945, 40.7320],
+                    [-73.9944, 40.7330],
+                    [-73.9943, 40.7340],
+                    [-73.9942, 40.7350],
+                    [-73.9941, 40.7360],
+                    [-73.9940, 40.7370],
+                    [-73.9939, 40.7380],
+                    [-73.9938, 40.7390],
+                    [-73.9937, 40.7400],
+                    [-73.9936, 40.7410],
+                    [-73.9935, 40.7420],
+                    [-73.9934, 40.7430],
+                    [-73.9933, 40.7440],
+                    [-73.9932, 40.7450],
+                    [-73.9931, 40.7460],
+                    [-73.9930, 40.7470],
+                    [-73.9929, 40.7480],
+                    [-73.9928, 40.7490],
+                    [-73.9927, 40.7500],
+                    [-73.9926, 40.7510],
+                    [-73.9925, 40.7520],
+                    [-73.9924, 40.7530],
+                    [-73.9923, 40.7540],
+                    [-73.9922, 40.7550],
+                    [-73.9921, 40.7560],
+                    [-73.9920, 40.7570],
+                    [-73.9915, 40.7575],
+                    [-73.9910, 40.7580],
+                    [-73.9905, 40.7585],
+                    [-73.9900, 40.7590],
+                    [-73.9895, 40.7595],
+                    [-73.9890, 40.7600],
+                    [-73.9885, 40.7605],
+                    [-73.9880, 40.7610],
+                    [-73.9875, 40.7615],
+                    [-73.9870, 40.7620],
+                    [-73.9865, 40.7625],
+                    [-73.9860, 40.7630],
+                    [-73.9855, 40.7635],
+                    [-73.9855, 40.7640],
+                    [-73.9855, 40.7650],
+                    [-73.9855, 40.7660],
+                    [-73.9855, 40.7670],
+                    [-73.9855, 40.7680],
+                    [-73.9855, 40.7690],
+                    [-73.9855, 40.7700],
+                    [-73.9855, 40.7710],
+                    [-73.9855, 40.7720],
+                    [-73.9855, 40.7730],
+                    [-73.9855, 40.7740],
+                    [-73.9855, 40.7750],
+                    [-73.9855, 40.758]   // Times Square
+                ]
+            },
+            provider: 'google_maps',
+            traffic_info: {
+                has_traffic_data: true,
+                normal_duration: 2100,
+                traffic_duration: 2340,
+                delay_seconds: 240 // 4 minutes delay
+            }
+        };
+        
+        function createTestRoute(routeData) {
+            return [{
+                driverId: "driver1",
+                driverName: "John Smith",
+                pickups: [testData.pickups[0]],
+                route: routeData,
+                pickupTimes: {
+                    departureTime: new Date("2024-12-28T14:25:00"),
+                    pickupTimes: [{
+                        pickup: testData.pickups[0],
+                        arrivalTime: new Date("2024-12-28T14:43:00"),
+                        formattedTime: "02:43 PM"
+                    }],
+                    formattedDepartureTime: "02:25 PM"
+                },
+                totalDuration: routeData.duration,
+                totalDistance: routeData.distance
+            }];
+        }
+        
+        window.testMockRouting = function() {
+            const resultsDiv = document.getElementById('testResults');
+            resultsDiv.innerHTML = '<div class="info">Testing mock routing with straight lines...</div>';
+            
+            try {
+                mapManager.initializeMap();
+                const routes = createTestRoute(mockRouteData);
+                mapManager.displayRoutes(routes, testData);
+                
+                resultsDiv.innerHTML = `
+                    <div class="success">
+                        ✅ Mock routing test complete<br>
+                        • Provider: ${mockRouteData.provider}<br>
+                        • Coordinates: ${mockRouteData.geometry.coordinates.length} points<br>
+                        • Shows straight-line connections
+                    </div>
+                `;
+                
+                updateFallbackDisplay(routes);
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+            }
+        };
+        
+        window.testSimulatedOSRM = function() {
+            const resultsDiv = document.getElementById('testResults');
+            resultsDiv.innerHTML = '<div class="info">Testing simulated OSRM routing with realistic path...</div>';
+            
+            try {
+                mapManager.initializeMap();
+                const routes = createTestRoute(osrmRouteData);
+                mapManager.displayRoutes(routes, testData);
+                
+                resultsDiv.innerHTML = `
+                    <div class="success">
+                        ✅ OSRM routing test complete<br>
+                        • Provider: ${osrmRouteData.provider}<br>
+                        • Coordinates: ${osrmRouteData.geometry.coordinates.length} points<br>
+                        • Shows realistic road path following streets
+                    </div>
+                `;
+                
+                updateFallbackDisplay(routes);
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+            }
+        };
+        
+        window.testSimulatedGoogleMaps = function() {
+            const resultsDiv = document.getElementById('testResults');
+            resultsDiv.innerHTML = '<div class="info">Testing simulated Google Maps routing with traffic data...</div>';
+            
+            try {
+                mapManager.initializeMap();
+                const routes = createTestRoute(googleMapsRouteData);
+                mapManager.displayRoutes(routes, testData);
+                
+                resultsDiv.innerHTML = `
+                    <div class="success">
+                        ✅ Google Maps routing test complete<br>
+                        • Provider: ${googleMapsRouteData.provider}<br>
+                        • Coordinates: ${googleMapsRouteData.geometry.coordinates.length} points<br>
+                        • Has traffic data: ${googleMapsRouteData.traffic_info.has_traffic_data}<br>
+                        • Traffic delay: ${Math.round(googleMapsRouteData.traffic_info.delay_seconds / 60)} minutes<br>
+                        • Shows detailed route path with traffic awareness
+                    </div>
+                `;
+                
+                updateFallbackDisplay(routes);
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+            }
+        };
+        
+        window.clearMap = function() {
+            mapManager.destroy();
+            document.getElementById('testResults').innerHTML = '';
+            document.getElementById('fallbackDisplay').innerHTML = '';
+        };
+        
+        function updateFallbackDisplay(routes) {
+            const fallbackDiv = document.getElementById('fallbackDisplay');
+            
+            // Simulate the fallback display
+            const mapContent = document.createElement('div');
+            mapContent.id = 'mapContent';
+            fallbackDiv.innerHTML = '';
+            fallbackDiv.appendChild(mapContent);
+            
+            const mapLegend = document.createElement('div');
+            mapLegend.id = 'mapLegend';
+            fallbackDiv.appendChild(mapLegend);
+            
+            mapManager.displayFallbackRoutes(routes, testData);
+        }
+        
+        // Initialize on load
+        window.addEventListener('load', () => {
+            mapManager.initializeMap();
+        });
+    </script>
+</body>
+</html>
