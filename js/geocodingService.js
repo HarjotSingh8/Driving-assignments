@@ -209,57 +209,52 @@ export class GeocodingService {
      * Decode a short Plus Code using locality context
      */
     decodeShortPlusCode(code, localityCenter) {
-        // This is a simplified implementation for short codes
-        // In practice, you'd need more sophisticated reference point calculation
+        // For short codes, we need to recover the missing prefix characters
+        // using the locality center as a reference point
         try {
-            // For short codes, we'll estimate coordinates based on locality and code
             const parts = code.split('+');
             const prefix = parts[0];
-            const suffix = parts[1];
+            const suffix = parts[1] || '';
             
-            // Use locality center as base and add offset based on short code
-            const { alphabet } = this.plusCodeConfig;
+            // First, encode the locality center to get the missing prefix
+            const missingPairs = (this.plusCodeConfig.pairCodeLength - prefix.length) / 2;
+            let fullPrefix = '';
             
-            let latOffset = 0;
-            let lngOffset = 0;
+            // Generate the full code by finding what prefix would encode to near the locality center
+            // This is a simplified approach - we'll find the grid cell containing the locality
+            let lat = -this.plusCodeConfig.latitudeMax;
+            let lng = -this.plusCodeConfig.longitudeMax;
             
-            // Decode the short prefix
-            for (let i = 0; i < prefix.length; i += 2) {
-                if (i + 1 >= prefix.length) break;
+            // Build the missing prefix by working backwards from locality center
+            const { alphabet, pairPrecisions } = this.plusCodeConfig;
+            
+            for (let level = 0; level < missingPairs; level++) {
+                const precision = pairPrecisions[level];
                 
-                const latChar = prefix[i];
-                const lngChar = prefix[i + 1];
+                // Find which cell contains the locality center at this level
+                const latIndex = Math.floor((localityCenter.lat - lat) / precision);
+                const lngIndex = Math.floor((localityCenter.lng - lng) / precision);
                 
-                const latIndex = alphabet.indexOf(latChar);
-                const lngIndex = alphabet.indexOf(lngChar);
+                // Clamp to valid range
+                const clampedLatIndex = Math.max(0, Math.min(19, latIndex));
+                const clampedLngIndex = Math.max(0, Math.min(19, lngIndex));
                 
-                if (latIndex !== -1 && lngIndex !== -1) {
-                    // Add fine-grained offset
-                    latOffset += latIndex * 0.0025;
-                    lngOffset += lngIndex * 0.0025;
-                }
+                fullPrefix += alphabet[clampedLatIndex] + alphabet[clampedLngIndex];
+                
+                // Update position for next level
+                lat += clampedLatIndex * precision;
+                lng += clampedLngIndex * precision;
             }
             
-            // Add grid refinement from suffix
-            if (suffix.length > 0) {
-                const gridChar = suffix[0];
-                const gridIndex = alphabet.indexOf(gridChar);
-                
-                if (gridIndex !== -1) {
-                    const gridLatIndex = Math.floor(gridIndex / 4);
-                    const gridLngIndex = gridIndex % 4;
-                    
-                    latOffset += gridLatIndex * 0.000125;
-                    lngOffset += gridLngIndex * 0.000125;
-                }
-            }
+            // Combine with the provided short code
+            const fullCode = fullPrefix + prefix + '+' + suffix;
             
-            return {
-                lat: localityCenter.lat + latOffset,
-                lng: localityCenter.lng + lngOffset
-            };
+            // Now decode as a normal full plus code
+            const fullParts = fullCode.split('+');
+            return this.decodeFullPlusCode(fullParts[0], fullParts[1]);
+            
         } catch (error) {
-            throw new Error(`Could not decode short Plus Code ${code} with locality context`);
+            throw new Error(`Could not decode short Plus Code ${code} with locality context: ${error.message}`);
         }
     }
     
