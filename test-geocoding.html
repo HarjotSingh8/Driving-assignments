@@ -22,6 +22,36 @@
     <p>This page tests the geocoding functionality to demonstrate the fix for the random location issue.</p>
     
     <div class="test-section">
+        <h2>Test Google Plus Codes</h2>
+        <p>Test the new Google Plus Code functionality with various formats:</p>
+        <div>
+            <input type="text" id="plusCodeAddress" placeholder="Enter a Plus Code address" value="8W3C+95 Windsor, Ontario">
+            <button onclick="testPlusCode()">Test Plus Code</button>
+            <button onclick="testShortPlusCode()">Test Short Code</button>
+            <button onclick="testFullPlusCode()">Test Full Code</button>
+        </div>
+        <div id="plusCodeResults"></div>
+        
+        <h3>Plus Code Examples to Try:</h3>
+        <ul>
+            <li><strong>Short Codes (need locality):</strong>
+                <ul>
+                    <li>8W3C+95 Windsor, Ontario</li>
+                    <li>9G8F+6W New York, NY</li>
+                    <li>87G2+22 Toronto, Ontario</li>
+                </ul>
+            </li>
+            <li><strong>Full Codes (global):</strong>
+                <ul>
+                    <li>8FVC9G8F+6W (Zurich, Switzerland)</li>
+                    <li>87G2F22M+C2 (Toronto, Ontario)</li>
+                    <li>87G8Q9G8+F6 (New York, NY)</li>
+                </ul>
+            </li>
+        </ul>
+    </div>
+    
+    <div class="test-section">
         <h2>Test Real vs Mock Geocoding</h2>
         <div>
             <input type="text" id="testAddress" placeholder="Enter an address to test" value="1600 Pennsylvania Avenue, Washington, DC">
@@ -51,6 +81,13 @@
             <li>LaGuardia Airport, New York, NY</li>
             <li>Grand Central Station, New York, NY</li>
             <li>Wall Street, New York, NY</li>
+            <li><strong>Plus Code examples:</strong>
+                <ul>
+                    <li>8W3C+95 Windsor, Ontario</li>
+                    <li>87G2+22 Toronto, Ontario</li>
+                    <li>9G8F+6W New York, NY</li>
+                </ul>
+            </li>
         </ul>
     </div>
 
@@ -58,6 +95,85 @@
         import { GeocodingService } from './js/geocodingService.js';
         
         window.geocodingService = new GeocodingService();
+        
+        window.testPlusCode = async function() {
+            const address = document.getElementById('plusCodeAddress').value;
+            const resultsDiv = document.getElementById('plusCodeResults');
+            resultsDiv.innerHTML = '<div class="warning">Testing Plus Code...</div>';
+            
+            try {
+                geocodingService.setUseRealGeocoding(true);
+                const result = await geocodingService.geocodeAddress(address);
+                resultsDiv.innerHTML = `
+                    <div class="success">
+                        <strong>Plus Code Success:</strong><br>
+                        Address: ${address}<br>
+                        Coordinates: ${result.lat}, ${result.lng}<br>
+                        Display Name: ${result.displayName}
+                    </div>
+                `;
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="error">
+                        <strong>Plus Code Failed:</strong><br>
+                        ${error.message}
+                    </div>
+                `;
+            }
+        };
+        
+        window.testShortPlusCode = async function() {
+            const resultsDiv = document.getElementById('plusCodeResults');
+            const shortCode = "9G8F+6W New York, NY";
+            resultsDiv.innerHTML = '<div class="warning">Testing Short Plus Code...</div>';
+            
+            try {
+                geocodingService.setUseRealGeocoding(true);
+                const result = await geocodingService.geocodeAddress(shortCode);
+                resultsDiv.innerHTML = `
+                    <div class="success">
+                        <strong>Short Plus Code Success:</strong><br>
+                        Address: ${shortCode}<br>
+                        Coordinates: ${result.lat}, ${result.lng}<br>
+                        Display Name: ${result.displayName}
+                    </div>
+                `;
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="error">
+                        <strong>Short Plus Code Failed:</strong><br>
+                        ${error.message}
+                    </div>
+                `;
+            }
+        };
+        
+        window.testFullPlusCode = async function() {
+            const resultsDiv = document.getElementById('plusCodeResults');
+            const fullCode = "8FVC9G8F+6W";
+            resultsDiv.innerHTML = '<div class="warning">Testing Full Plus Code...</div>';
+            
+            try {
+                geocodingService.setUseRealGeocoding(true);
+                const result = await geocodingService.geocodeAddress(fullCode);
+                resultsDiv.innerHTML = `
+                    <div class="success">
+                        <strong>Full Plus Code Success:</strong><br>
+                        Address: ${fullCode}<br>
+                        Coordinates: ${result.lat}, ${result.lng}<br>
+                        Display Name: ${result.displayName}<br>
+                        <small>Note: This should be somewhere in Zurich, Switzerland</small>
+                    </div>
+                `;
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="error">
+                        <strong>Full Plus Code Failed:</strong><br>
+                        ${error.message}
+                    </div>
+                `;
+            }
+        };
         
         window.testRealGeocoding = async function() {
             const address = document.getElementById('testAddress').value;

@@ -1,6 +1,24 @@
 // Geocoding service with real API integration and mock fallback
 export class GeocodingService {
     constructor() {
+        // Google Plus Code (Open Location Code) configuration
+        this.plusCodeConfig = {
+            // Character set used in Plus Codes (excludes 0, 1, A, E, I, L, O, S, U, Z)
+            alphabet: '23456789CFGHJMPQRVWX',
+            // Base for encoding (20 characters)
+            base: 20,
+            // Grid dimensions
+            latitudeMax: 90,
+            longitudeMax: 180,
+            // Code lengths
+            pairCodeLength: 8,
+            gridCodeLength: 2,
+            // Precision levels
+            pairPrecisions: [20.0, 1.0, 0.05, 0.0025, 0.000125],
+            gridRows: 5,
+            gridCols: 4
+        };
+        
         // Mock coordinate database for common locations (fallback)
         this.mockLocations = {
             'times square, new york, ny': { lat: 40.7580, lng: -73.9855, displayName: 'Times Square, New York, NY' },
@@ -14,7 +32,11 @@ export class GeocodingService {
             'jfk airport, new york, ny': { lat: 40.6413, lng: -73.7781, displayName: 'JFK Airport, New York, NY' },
             'laguardia airport, new york, ny': { lat: 40.7769, lng: -73.8740, displayName: 'LaGuardia Airport, New York, NY' },
             'grand central station, new york, ny': { lat: 40.7527, lng: -73.9772, displayName: 'Grand Central Terminal, New York, NY' },
-            'wall street, new york, ny': { lat: 40.7074, lng: -74.0113, displayName: 'Wall Street, New York, NY' }
+            'wall street, new york, ny': { lat: 40.7074, lng: -74.0113, displayName: 'Wall Street, New York, NY' },
+            // Google Plus Code examples for testing
+            '8w3c+95 windsor, ontario': { lat: 42.3042, lng: -83.0642, displayName: 'Windsor, Ontario (Plus Code: 8W3C+95)' },
+            '87g2+22 toronto, ontario': { lat: 43.6755, lng: -79.4990, displayName: 'Toronto, Ontario (Plus Code: 87G2+22)' },
+            '9g8f+6w new york, ny': { lat: 40.7666, lng: -73.9754, displayName: 'New York, NY (Plus Code: 9G8F+6W)' }
         };
         this.cache = new Map();
         this.lastRequestTime = 0;
@@ -28,6 +50,13 @@ export class GeocodingService {
         }
         
         let result = null;
+        
+        // Check if the address contains a Google Plus Code first
+        const plusCodeResult = this.detectAndDecodePlusCode(address);
+        if (plusCodeResult) {
+            this.cache.set(address, plusCodeResult);
+            return plusCodeResult;
+        }
         
         // Try real geocoding first if enabled
         if (this.useRealGeocoding) {
@@ -46,6 +75,214 @@ export class GeocodingService {
         result = await this.geocodeWithMock(address);
         this.cache.set(address, result);
         return result;
+    }
+    
+    /**
+     * Detect and decode Google Plus Codes (Open Location Codes) in an address
+     */
+    detectAndDecodePlusCode(address) {
+        // Regular expression to match Plus Codes
+        // Matches patterns like "8W3C+95", "9G8F+6W", "8FVC9G8F+6W" etc.
+        const plusCodeRegex = /([23456789CFGHJMPQRVWX]{2,8}\+[23456789CFGHJMPQRVWX]{2,3})/i;
+        const match = address.match(plusCodeRegex);
+        
+        if (!match) {
+            return null;
+        }
+        
+        const plusCode = match[1].toUpperCase();
+        const locality = address.replace(plusCodeRegex, '').trim().replace(/^,\s*/, '').replace(/\s*,$/, '');
+        
+        try {
+            const decoded = this.decodePlusCode(plusCode, locality);
+            return {
+                lat: decoded.lat,
+                lng: decoded.lng,
+                displayName: locality ? `${locality} (Plus Code: ${plusCode})` : `Plus Code: ${plusCode}`
+            };
+        } catch (error) {
+            console.warn(`Failed to decode Plus Code ${plusCode}:`, error.message);
+            return null;
+        }
+    }
+    
+    /**
+     * Decode a Google Plus Code to latitude and longitude
+     */
+    decodePlusCode(code, locality = null) {
+        // Remove any spaces and convert to uppercase
+        code = code.replace(/\s/g, '').toUpperCase();
+        
+        // Validate Plus Code format
+        if (!code.includes('+')) {
+            throw new Error('Invalid Plus Code: must contain a + character');
+        }
+        
+        const parts = code.split('+');
+        if (parts.length !== 2) {
+            throw new Error('Invalid Plus Code: must have exactly one + character');
+        }
+        
+        const [prefix, suffix] = parts;
+        
+        // Validate character set
+        const validChars = this.plusCodeConfig.alphabet;
+        for (const char of code.replace('+', '')) {
+            if (!validChars.includes(char)) {
+                throw new Error(`Invalid Plus Code character: ${char}`);
+            }
+        }
+        
+        // Handle short codes (need locality context)
+        if (prefix.length < this.plusCodeConfig.pairCodeLength) {
+            if (!locality) {
+                throw new Error('Short Plus Code requires locality context');
+            }
+            // For simplicity, we'll use approximate center coordinates for common areas
+            const localityCenter = this.getLocalityCenter(locality);
+            return this.decodeShortPlusCode(code, localityCenter);
+        }
+        
+        // Decode full Plus Code
+        return this.decodeFullPlusCode(prefix, suffix);
+    }
+    
+    /**
+     * Decode a full Plus Code (8+ characters before +)
+     */
+    decodeFullPlusCode(prefix, suffix) {
+        const { alphabet, base, latitudeMax, longitudeMax, pairPrecisions } = this.plusCodeConfig;
+        
+        // Initialize coordinates
+        let lat = -latitudeMax;
+        let lng = -longitudeMax;
+        
+        // Decode pairs (each pair represents one level of precision)
+        for (let i = 0; i < prefix.length; i += 2) {
+            if (i + 1 >= prefix.length) break;
+            
+            const latChar = prefix[i];
+            const lngChar = prefix[i + 1];
+            
+            const latIndex = alphabet.indexOf(latChar);
+            const lngIndex = alphabet.indexOf(lngChar);
+            
+            if (latIndex === -1 || lngIndex === -1) {
+                throw new Error(`Invalid Plus Code characters: ${latChar}${lngChar}`);
+            }
+            
+            const precision = pairPrecisions[Math.floor(i / 2)] || pairPrecisions[pairPrecisions.length - 1];
+            
+            lat += latIndex * precision;
+            lng += lngIndex * precision;
+        }
+        
+        // Decode grid refinement if present in suffix
+        if (suffix.length > 0) {
+            const gridChar = suffix[0];
+            const gridIndex = alphabet.indexOf(gridChar);
+            
+            if (gridIndex !== -1) {
+                const { gridRows, gridCols } = this.plusCodeConfig;
+                const gridLatIndex = Math.floor(gridIndex / gridCols);
+                const gridLngIndex = gridIndex % gridCols;
+                
+                const gridPrecision = pairPrecisions[pairPrecisions.length - 1] / gridRows;
+                
+                lat += gridLatIndex * gridPrecision;
+                lng += gridLngIndex * gridPrecision;
+            }
+        }
+        
+        // Add half the precision to get center of the cell
+        const finalPrecision = suffix.length > 0 ? 
+            pairPrecisions[pairPrecisions.length - 1] / this.plusCodeConfig.gridRows :
+            pairPrecisions[Math.min(Math.floor(prefix.length / 2) - 1, pairPrecisions.length - 1)] || pairPrecisions[pairPrecisions.length - 1];
+        
+        lat += finalPrecision / 2;
+        lng += finalPrecision / 2;
+        
+        return { lat, lng };
+    }
+    
+    /**
+     * Decode a short Plus Code using locality context
+     */
+    decodeShortPlusCode(code, localityCenter) {
+        // This is a simplified implementation for short codes
+        // In practice, you'd need more sophisticated reference point calculation
+        try {
+            // For short codes, we'll estimate coordinates based on locality and code
+            const parts = code.split('+');
+            const prefix = parts[0];
+            const suffix = parts[1];
+            
+            // Use locality center as base and add offset based on short code
+            const { alphabet } = this.plusCodeConfig;
+            
+            let latOffset = 0;
+            let lngOffset = 0;
+            
+            // Decode the short prefix
+            for (let i = 0; i < prefix.length; i += 2) {
+                if (i + 1 >= prefix.length) break;
+                
+                const latChar = prefix[i];
+                const lngChar = prefix[i + 1];
+                
+                const latIndex = alphabet.indexOf(latChar);
+                const lngIndex = alphabet.indexOf(lngChar);
+                
+                if (latIndex !== -1 && lngIndex !== -1) {
+                    // Add fine-grained offset
+                    latOffset += latIndex * 0.0025;
+                    lngOffset += lngIndex * 0.0025;
+                }
+            }
+            
+            // Add grid refinement from suffix
+            if (suffix.length > 0) {
+                const gridChar = suffix[0];
+                const gridIndex = alphabet.indexOf(gridChar);
+                
+                if (gridIndex !== -1) {
+                    const gridLatIndex = Math.floor(gridIndex / 4);
+                    const gridLngIndex = gridIndex % 4;
+                    
+                    latOffset += gridLatIndex * 0.000125;
+                    lngOffset += gridLngIndex * 0.000125;
+                }
+            }
+            
+            return {
+                lat: localityCenter.lat + latOffset,
+                lng: localityCenter.lng + lngOffset
+            };
+        } catch (error) {
+            throw new Error(`Could not decode short Plus Code ${code} with locality context`);
+        }
+    }
+    
+    /**
+     * Get approximate center coordinates for common localities
+     */
+    getLocalityCenter(locality) {
+        // Normalize locality string
+        const normalized = locality.toLowerCase().trim();
+        
+        // Common locality centers (this would be more comprehensive in production)
+        const localityCenters = {
+            'windsor, ontario': { lat: 42.3149, lng: -83.0364 },
+            'windsor': { lat: 42.3149, lng: -83.0364 },
+            'toronto, ontario': { lat: 43.6532, lng: -79.3832 },
+            'toronto': { lat: 43.6532, lng: -79.3832 },
+            'new york, ny': { lat: 40.7128, lng: -74.0060 },
+            'new york': { lat: 40.7128, lng: -74.0060 },
+            'ontario': { lat: 44.2619, lng: -78.2957 },
+            'ny': { lat: 43.2994, lng: -74.2179 }
+        };
+        
+        return localityCenters[normalized] || { lat: 0, lng: 0 };
     }
     
     /**
