@@ -109,9 +109,15 @@ class DrivingAssignmentsApp {
     async handleAddDriver() {
         const name = document.getElementById('driverName').value.trim();
         const address = document.getElementById('driverAddress').value.trim();
+        const seats = parseInt(document.getElementById('driverSeats').value) || 4;
         
         if (!name || !address) {
             alert('Please enter both driver name and address');
+            return;
+        }
+        
+        if (seats < 1 || seats > 20) {
+            alert('Number of seats must be between 1 and 20');
             return;
         }
         
@@ -123,11 +129,13 @@ class DrivingAssignmentsApp {
                 id: Date.now().toString(),
                 name,
                 address,
-                coordinates: coords
+                coordinates: coords,
+                seats
             });
             
             document.getElementById('driverName').value = '';
             document.getElementById('driverAddress').value = '';
+            document.getElementById('driverSeats').value = '4';
             
             this.uiManager.updateDriversList(this.dataManager.getData().drivers);
             this.saveData();
@@ -141,9 +149,16 @@ class DrivingAssignmentsApp {
     async handleAddPickup() {
         const name = document.getElementById('pickupName').value.trim();
         const address = document.getElementById('pickupAddress').value.trim();
+        const addressLabel = document.getElementById('addressLabel').value.trim();
+        const numberOfPeople = parseInt(document.getElementById('numberOfPeople').value) || 1;
         
         if (!name || !address) {
             alert('Please enter both person name and pickup address');
+            return;
+        }
+        
+        if (numberOfPeople < 1 || numberOfPeople > 10) {
+            alert('Number of people must be between 1 and 10');
             return;
         }
         
@@ -155,11 +170,15 @@ class DrivingAssignmentsApp {
                 id: Date.now().toString(),
                 name,
                 address,
-                coordinates: coords
+                coordinates: coords,
+                addressLabel: addressLabel || address, // Use address as fallback if no label
+                numberOfPeople
             });
             
             document.getElementById('pickupName').value = '';
             document.getElementById('pickupAddress').value = '';
+            document.getElementById('addressLabel').value = '';
+            document.getElementById('numberOfPeople').value = '1';
             
             this.uiManager.updatePickupsList(this.dataManager.getData().pickups);
             this.saveData();

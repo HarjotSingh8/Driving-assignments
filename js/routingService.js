@@ -32,16 +32,13 @@ export class RoutingService {
      */
     async greedyAllocationWithBalancing(drivers, pickups, destination) {
         const allocation = {};
-        const driverLoads = {};
+        const driverLoads = {}; // Track number of people assigned, not pickups
         
         // Initialize allocation and load tracking
         drivers.forEach(driver => {
             allocation[driver.id] = [];
             driverLoads[driver.id] = 0;
         });
-        
-        // Calculate max pickup load per driver (balanced distribution)
-        const maxPickupsPerDriver = Math.ceil(pickups.length / drivers.length);
         
         // Create a copy of pickups to work with
         const remainingPickups = [...pickups];
@@ -53,11 +50,13 @@ export class RoutingService {
             // For each remaining pickup, find the best driver assignment
             for (let i = 0; i < remainingPickups.length; i++) {
                 const pickup = remainingPickups[i];
+                const pickupPeople = pickup.numberOfPeople || 1;
                 
                 for (const driver of drivers) {
-                    // Skip if driver already has maximum load
-                    if (driverLoads[driver.id] >= maxPickupsPerDriver && 
-                        remainingPickups.length > drivers.filter(d => driverLoads[d.id] < maxPickupsPerDriver).length) {
+                    const driverCapacity = driver.seats || 4;
+                    
+                    // Skip if driver doesn't have enough capacity
+                    if (driverLoads[driver.id] + pickupPeople > driverCapacity) {
                         continue;
                     }
                     
@@ -71,7 +70,8 @@ export class RoutingService {
                         bestAllocation = {
                             pickup,
                             pickupIndex: i,
-                            driverId: driver.id
+                            driverId: driver.id,
+                            peopleCount: pickupPeople
                         };
                     }
                 }
@@ -80,15 +80,32 @@ export class RoutingService {
             // Apply the best allocation found
             if (bestAllocation) {
                 allocation[bestAllocation.driverId].push(bestAllocation.pickup.id);
-                driverLoads[bestAllocation.driverId]++;
+                driverLoads[bestAllocation.driverId] += bestAllocation.peopleCount;
                 remainingPickups.splice(bestAllocation.pickupIndex, 1);
             } else {
-                // Fallback: assign to driver with least load
-                const leastLoadedDriver = drivers.reduce((min, driver) => 
-                    driverLoads[driver.id] < driverLoads[min.id] ? driver : min
-                );
-                allocation[leastLoadedDriver.id].push(remainingPickups[0].id);
-                driverLoads[leastLoadedDriver.id]++;
+                // Fallback: try to find any driver with enough capacity
+                const pickup = remainingPickups[0];
+                const pickupPeople = pickup.numberOfPeople || 1;
+                
+                const availableDriver = drivers.find(driver => {
+                    const driverCapacity = driver.seats || 4;
+                    return driverLoads[driver.id] + pickupPeople <= driverCapacity;
+                });
+                
+                if (availableDriver) {
+                    allocation[availableDriver.id].push(pickup.id);
+                    driverLoads[availableDriver.id] += pickupPeople;
+                } else {
+                    // No capacity available - assign to driver with most available space
+                    const bestDriver = drivers.reduce((best, driver) => {
+                        const bestCapacity = (best.seats || 4) - driverLoads[best.id];
+                        const driverCapacity = (driver.seats || 4) - driverLoads[driver.id];
+                        return driverCapacity > bestCapacity ? driver : best;
+                    });
+                    allocation[bestDriver.id].push(pickup.id);
+                    driverLoads[bestDriver.id] += pickupPeople;
+                }
+                
                 remainingPickups.splice(0, 1);
             }
         }
