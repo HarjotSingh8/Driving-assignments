@@ -36,14 +36,30 @@ export class UIManager {
         const coords = item.coordinates;
         const coordsText = coords ? `${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}` : 'No coordinates';
         
-        div.innerHTML = `
-            <div class="item-info">
-                <div class="item-name">${this.escapeHtml(item.name)}</div>
-                <div class="item-address">${this.escapeHtml(item.address)}</div>
-                <div class="item-coords">${coordsText}</div>
-            </div>
-            <button class="remove-btn" data-id="${item.id}" data-type="${type}">Remove</button>
-        `;
+        if (type === 'driver') {
+            const seats = item.seats || 4; // Default to 4 if not specified
+            div.innerHTML = `
+                <div class="item-info">
+                    <div class="item-name">${this.escapeHtml(item.name)} (${seats} seats)</div>
+                    <div class="item-address">${this.escapeHtml(item.address)}</div>
+                    <div class="item-coords">${coordsText}</div>
+                </div>
+                <button class="remove-btn" data-id="${item.id}" data-type="${type}">Remove</button>
+            `;
+        } else if (type === 'pickup') {
+            const numberOfPeople = item.numberOfPeople || 1;
+            const addressLabel = item.addressLabel || item.address;
+            const peopleText = numberOfPeople === 1 ? '1 person' : `${numberOfPeople} people`;
+            
+            div.innerHTML = `
+                <div class="item-info">
+                    <div class="item-name">${this.escapeHtml(item.name)} (${peopleText})</div>
+                    <div class="item-address">${this.escapeHtml(addressLabel)}</div>
+                    <div class="item-coords">${coordsText}</div>
+                </div>
+                <button class="remove-btn" data-id="${item.id}" data-type="${type}">Remove</button>
+            `;
+        }
         
         return div;
     }
@@ -85,15 +101,25 @@ export class UIManager {
             const driverDiv = document.createElement('div');
             driverDiv.className = 'driver-assignment';
             
+            const driverSeats = driver.seats || 4;
+            
             driverDiv.innerHTML = `
-                <h4>${this.escapeHtml(driver.name)}</h4>
+                <h4>${this.escapeHtml(driver.name)} (${driverSeats} seats available)</h4>
                 <div class="pickup-checkboxes" data-driver-id="${driver.id}">
-                    ${data.pickups.map(pickup => `
-                        <label class="pickup-checkbox">
-                            <input type="checkbox" data-pickup-id="${pickup.id}" data-driver-id="${driver.id}">
-                            <span>${this.escapeHtml(pickup.name)} - ${this.escapeHtml(pickup.address)}</span>
-                        </label>
-                    `).join('')}
+                    ${data.pickups.map(pickup => {
+                        const numberOfPeople = pickup.numberOfPeople || 1;
+                        const addressLabel = pickup.addressLabel || pickup.address;
+                        const peopleText = numberOfPeople === 1 ? '1 person' : `${numberOfPeople} people`;
+                        return `
+                            <label class="pickup-checkbox">
+                                <input type="checkbox" data-pickup-id="${pickup.id}" data-driver-id="${driver.id}" data-people-count="${numberOfPeople}">
+                                <span>${this.escapeHtml(pickup.name)} (${peopleText}) - ${this.escapeHtml(addressLabel)}</span>
+                            </label>
+                        `;
+                    }).join('')}
+                </div>
+                <div class="capacity-indicator" data-driver-id="${driver.id}">
+                    <small>Capacity: <span class="assigned-count">0</span>/${driverSeats} seats</small>
                 </div>
             `;
             
@@ -104,6 +130,53 @@ export class UIManager {
         
         // Add event listeners for auto-assign buttons
         this.setupAutoAssignListeners();
+        
+        // Add event listeners for capacity tracking
+        this.setupCapacityTracking();
+    }
+    
+    setupCapacityTracking() {
+        // Add event listeners to all checkboxes to track capacity
+        document.querySelectorAll('.pickup-checkboxes input[type="checkbox"]').forEach(checkbox => {
+            checkbox.addEventListener('change', () => {
+                this.updateCapacityIndicators();
+            });
+        });
+        
+        // Initial capacity update
+        this.updateCapacityIndicators();
+    }
+    
+    updateCapacityIndicators() {
+        // Update capacity indicators for each driver
+        document.querySelectorAll('.capacity-indicator').forEach(indicator => {
+            const driverId = indicator.dataset.driverId;
+            const checkboxes = document.querySelectorAll(`input[data-driver-id="${driverId}"]:checked`);
+            
+            let totalAssigned = 0;
+            checkboxes.forEach(checkbox => {
+                const peopleCount = parseInt(checkbox.dataset.peopleCount) || 1;
+                totalAssigned += peopleCount;
+            });
+            
+            const assignedSpan = indicator.querySelector('.assigned-count');
+            if (assignedSpan) {
+                assignedSpan.textContent = totalAssigned;
+                
+                // Add visual indicator for over-capacity
+                const capacityText = indicator.querySelector('small');
+                if (capacityText) {
+                    const maxCapacity = parseInt(capacityText.textContent.split('/')[1]);
+                    if (totalAssigned > maxCapacity) {
+                        indicator.style.color = '#d32f2f';
+                        indicator.style.fontWeight = 'bold';
+                    } else {
+                        indicator.style.color = '#333';
+                        indicator.style.fontWeight = 'normal';
+                    }
+                }
+            }
+        });
     }
     
     setupAutoAssignListeners() {
@@ -144,6 +217,9 @@ export class UIManager {
             checkbox.checked = false;
         });
         
+        // Update capacity indicators
+        this.updateCapacityIndicators();
+        
         this.showMessage('All assignments cleared', 'success');
     }
     
@@ -163,6 +239,9 @@ export class UIManager {
                 }
             });
         });
+        
+        // Update capacity indicators
+        this.updateCapacityIndicators();
         
         // Count assignments for feedback
         const totalAssignments = Object.values(assignments).reduce((sum, pickups) => sum + pickups.length, 0);

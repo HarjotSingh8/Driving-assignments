@@ -39,6 +39,7 @@
                     <div class="input-group">
                         <input type="text" id="driverName" placeholder="Driver name">
                         <input type="text" id="driverAddress" placeholder="Driver address">
+                        <input type="number" id="driverSeats" placeholder="Seats" min="1" max="20" value="4">
                         <button id="addDriver">Add Driver</button>
                     </div>
                     <div id="driversList" class="items-list"></div>
@@ -49,6 +50,8 @@
                     <div class="input-group">
                         <input type="text" id="pickupName" placeholder="Person name">
                         <input type="text" id="pickupAddress" placeholder="Pickup address">
+                        <input type="text" id="addressLabel" placeholder="Location label (e.g., 'John's House')">
+                        <input type="number" id="numberOfPeople" placeholder="People" min="1" max="10" value="1">
                         <button id="addPickup">Add Pickup</button>
                     </div>
                     <div id="pickupsList" class="items-list"></div>
